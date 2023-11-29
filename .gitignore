@@ -13,7 +13,8 @@ plots/
 *$.core
 **/[Cc]ore*
 
-*$.data
+**/*.data
+**/*.joblib
 
 scripts/data
 scripts/proc*
