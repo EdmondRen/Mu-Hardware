@@ -137,13 +137,20 @@ def disconnect(my_instrument):
     
     
     
-def get_calibration(scope):
-    dx = float(scope.query(":WAVeform:XINCrement?")[:-1])
-    dy = float(scope.query(":WAVeform:YINCrement?")[:-1])
-    x0 = float(scope.query(":WAVeform:XORigin?")[:-1])
-    y0 = float(scope.query(":WAVeform:YORigin?")[:-1])
+def get_calibration(scope, read_channel = [1,2]):
+    calibration_data = {}
     
-    return dx,dy,x0,y0
+    for ch in read_channel:
+        # Copy the waveform
+        scope.write(f":WAVeform:SOURce CHANnel{ch}")# Select source.
+        
+        dx = float(scope.query(":WAVeform:XINCrement?")[:-1])
+        dy = float(scope.query(":WAVeform:YINCrement?")[:-1])
+        x0 = float(scope.query(":WAVeform:XORigin?")[:-1])
+        y0 = float(scope.query(":WAVeform:YORigin?")[:-1])
+        calibration_data[ch] = [dx,dy,x0,y0]
+    
+    return calibration_data
 
 def read_waveform(scope, trigger_channel = 1, read_channel = [1,2], acquire_length = 4096, calibrate = True, initialize = False, calibration_data=None):
 
@@ -161,8 +168,8 @@ def read_waveform(scope, trigger_channel = 1, read_channel = [1,2], acquire_leng
         
         # Other settings
         scope.write(":SYSTem:HEADer OFF")# ' Response headers off.
-        scope.write(":WAVeform:BYTeorder LSBFirst")# ' Select word format.
         scope.write(":WAVeform:FORMat WORD")# ' Select word format.
+        scope.write(":WAVeform:BYTeorder LSBFirst")# ' Select word format.
         scope.write(":WAVeform:STReaming 0")#        
         
         for ch in read_channel:
@@ -194,7 +201,7 @@ def read_waveform(scope, trigger_channel = 1, read_channel = [1,2], acquire_leng
                 x0 = float(scope.query(":WAVeform:XORigin?")[:-1])
                 y0 = float(scope.query(":WAVeform:YORigin?")[:-1])
             else:
-                dx,dy,x0,y0 = calibration_data
+                dx,dy,x0,y0 = calibration_data[ch]
             varWavData = varWavData*dy + y0
             time_series = np.arange(len(varWavData))*dx + x0
         else:
@@ -215,9 +222,10 @@ def get_events(scope, Nevents = 100, trigger_channel = 1, read_channel = [1,2], 
         data_save[ch]=[]
         
         
-    # Get the calibration and initialize settings:
-    calibration_data = get_calibration(scope)
+    # Initialize settings:
     data,time_series=read_waveform(scope, trigger_channel = 1, read_channel = [1,2], acquire_length = 4096, calibrate = False, initialize = True, calibration_data=None)
+    # Get the calibration 
+    calibration_data = get_calibration(scope)
     
     
     # Start repetitive acquisation
