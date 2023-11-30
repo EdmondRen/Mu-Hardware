@@ -38,39 +38,78 @@ def Poly(x, *P):
     for coeff in P[::-1]:
         result = x * result + coeff
     return result
-def Chi2(x, dof, A):
-    return scipy.stats.chi2.pdf(x,dof)*A  
 
-def fit_curve(f, xdata, ydata, p0=None, sigma=None, absolute_sigma=False, check_finite=None, bounds=(-np.inf, np.inf), method=None, jac=None, **kwargs):
+def Pulse(x, A, x0 = 0, tau1=2, tau2=20):
+    # Fs: samples per s
+    dx=(x-x0)
+    dx*=np.heaviside(dx,1)
+    kernel = (np.exp(-dx/tau1)-np.exp(-dx/tau2))/(tau1-tau2)*np.heaviside(dx,1)
+    kernel_normed = kernel/np.max(kernel)
+    return kernel_normed*A
+
+def Chi2(x, dof, A):
+    return scipy.stats.chi2.pdf(x,dof)*A 
+
+
+
+
+
+def make_kernel_dummypulse(pre_trig, post_trig, tau1=2,tau2=20, Fs = 100):
+    # Fs: samples per s
+    x = np.arange(0,(pre_trig+post_trig))/Fs
+    x0 = pre_trig/Fs
+    dx=(x-x0)
+    dx*=np.heaviside(dx,1)
+    kernel = (np.exp(-dx/tau1)-np.exp(-dx/tau2))/(tau1-tau2)*np.heaviside(dx,1)
+    # kernel_normed = kernel/(np.dot(kernel,kernel/max(kernel)))
+    kernel_normed = kernel/np.max(kernel)
+    return kernel_normed
+
+def roll_zeropad(a, shift):
+    y = np.roll(a,shift)
+    y[:shift]=0
+    return y
+
+
+
+
+
+
+
+
+
+def fstr(template, scope):
+    """
+    Evaluate the f string later at a given scope
+    """
+    return eval(f"f'{template}'", scope)  
+
+def fit_curve(f, xdata, ydata, makeplot = True, label=None, fit_range=None, p0=None, sigma=None, absolute_sigma=False, check_finite=None, bounds=(-np.inf, np.inf), method=None, jac=None, **kwargs):
    
     if type(f) is str:
         if f in ["Gauss","gauss","gaus"]:
             f=Gauss
             mean = np.sum(xdata*ydata)/np.sum(ydata)
             p0 = [np.max(ydata), mean, np.sqrt(np.sum(ydata*(xdata-mean)**2)/(np.sum(ydata)-1))] if p0 is None else p0
-            sigma = np.sqrt(ydata) if sigma is None else sigma; sigma[sigma==0] =1
         elif f in ["Exp", "exp"]:
             f=Exp
             
-            
-    popt, pcov, info, *_ = scipy.optimize.curve_fit(f, xdata, ydata, p0=p0, sigma=sigma, absolute_sigma=absolute_sigma, check_finite=check_finite, bounds=bounds, method=method, jac=jac, full_output=True, **kwargs)   
     
-    return popt, pcov, info, f
-    
-    
-def fit_hist(f, h, makeplot = True, label=None, fit_range=None, p0=None, sigma=None, absolute_sigma=False, check_finite=None, bounds=(-np.inf, np.inf), method=None, jac=None, full_output=False, nan_policy=None, **kwargs):
-    def fstr(template, scope):
-        return eval(f"f'{template}'", scope)    
-    
-    xdata = 0.5*(h[1][:-1]+h[1][1:])
-    ydata = h[0]
-    fit_range = [xdata[0], xdata[-1]] if fit_range is None else fit_range
+    # Fit range
+    fit_range = [np.min(xdata), np.max(xdata)] if fit_range is None else fit_range
     mask = (xdata>=fit_range[0]) &(xdata<=fit_range[1])
     xdata = xdata[mask]
-    ydata = ydata[mask]
+    ydata = ydata[mask]   
     
-    popt, pcov, info, f = fit_curve(f, xdata, ydata, p0=p0, sigma=sigma, absolute_sigma=absolute_sigma, check_finite=check_finite, bounds=bounds, method=method, jac=jac, **kwargs)
-
+    # Get keyword arguments:
+    curvefit_kwargs = {}
+    for key, value in kwargs.items() :
+        if key in inspect.getfullargspec(scipy.optimize.curve_fit)[0] or key in ["maxfev"] :
+            curvefit_kwargs[key] = value
+    # for key, value in kwargs.items():    
+            
+    popt, pcov, info, *_ = scipy.optimize.curve_fit(f, xdata, ydata, p0=p0, sigma=sigma, absolute_sigma=absolute_sigma, check_finite=check_finite, bounds=bounds, method=method, jac=jac, full_output=True, **curvefit_kwargs)   
+    
     if makeplot:
         xdata_plot = np.linspace(*fit_range, 200)
         ydata_plot = f(xdata_plot, *popt)
@@ -78,6 +117,76 @@ def fit_hist(f, h, makeplot = True, label=None, fit_range=None, p0=None, sigma=N
         scope = locals()
         func_parameter_names = inspect.getfullargspec(f)[0][1:]
         label = fstr(label,scope) if label is not None else "Fit"
-        plot(xdata_plot, ydata_plot, label=label)
+        
+        # Get keyword arguments:
+        plotkwargs = {}
+        for key, value in kwargs.items() :
+            if key in ["color", "marker", "linestyle"] :
+                plotkwargs[key] = value
+        # for key, value in kwargs.items():
+        plot(xdata_plot, ydata_plot, label=label, **plotkwargs)    
     
     return popt, pcov, info, f
+    
+    
+def fit_hist(f, h, makeplot = True, label=None, fit_range=None, p0=None, sigma=None, absolute_sigma=False, check_finite=None, bounds=(-np.inf, np.inf), method=None, jac=None, full_output=False, nan_policy=None, **kwargs):
+
+    
+    # Limit fit range
+    xdata = 0.5*(h[1][:-1]+h[1][1:])
+    ydata = h[0]
+    fit_range = [xdata[0], xdata[-1]] if fit_range is None else fit_range
+    mask = (xdata>=fit_range[0]) &(xdata<=fit_range[1])
+    xdata = xdata[mask]
+    ydata = ydata[mask]
+    
+    # Calculate uncertainty
+    sigma = np.sqrt(ydata) if sigma is None else sigma; sigma[sigma==0] =1
+    
+    # Fit
+    popt, pcov, info, f = fit_curve(f, xdata, ydata, makeplot = makeplot, label=label, p0=p0, sigma=sigma, absolute_sigma=absolute_sigma, check_finite=check_finite, bounds=bounds, method=method, jac=jac, **kwargs)
+
+    return popt, pcov, info, f
+
+
+
+
+
+from typing import List, Tuple
+import scipy.ndimage
+
+def constant_fraction_discriminator(waveform: List[float], baseline: float, threshold: float, fraction: float, gauss_filter = None) -> List[Tuple[float, int]]:
+    """
+    This function takes in a waveform, baseline, threshold, and fraction as input and returns a list of tuples containing
+    the amplitude and sample number of the leading edge of each pulse.
+    """
+    leading_edges = []
+    triggered = False
+    
+    if gauss_filter is not None:
+        waveform = scipy.ndimage.gaussian_filter(waveform,sigma=gauss_filter,)
+    
+    for i in range(1, len(waveform)):
+        if waveform[i] > baseline + threshold:
+            if triggered:
+                continue
+                
+            for j in range(i - 1, -1, -1):
+                if waveform[j] < baseline + fraction * (waveform[i] - baseline):
+                    leading_edges.append((waveform[i], i))
+                    triggered=True
+                    break
+        else:
+            triggered = False
+    return leading_edges
+
+
+
+# trace = data_save[1][0]
+# trace-=np.mean(trace[:1600])
+# trace = -trace
+# trace/=15.8
+# leading_edges = constant_fraction_discriminator(trace, 0, 0.02, 0.5, gauss_filter=4)
+# plot(trace)
+# print(leading_edges)
+# axvline(leading_edges[0][1])
