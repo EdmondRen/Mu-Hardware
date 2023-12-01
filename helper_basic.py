@@ -3,7 +3,9 @@
 import inspect
 import os, sys
 import importlib
+import time
 from importlib import reload
+from tqdm import tqdm
 
 # Other libraries
 import scipy
@@ -51,10 +53,19 @@ def Chi2(x, dof, A):
     return scipy.stats.chi2.pdf(x,dof)*A 
 
 
+def pulse_2pole(t_rise_ns, t_fall_ns, samples_per_ns, total_samples=8000, pre_trig_samples=0):
+    total_time = total_samples/samples_per_ns
+    x = np.linspace(0,total_time, total_samples)
+    x0 = pre_trig_samples/samples_per_ns
+    dx=(x-x0)
+    dx*=np.heaviside(dx,1)
+    kernel = (np.exp(-dx/t_fall_ns)-np.exp(-dx/t_rise_ns))/np.heaviside(dx,1)
+    kernel_normed = kernel/max(kernel)#(np.dot(kernel,kernel/max(kernel)))
+    
+    return kernel_normed
 
 
-
-def make_kernel_dummypulse(pre_trig, post_trig, tau1=2,tau2=20, Fs = 100):
+def pulse_2pole_old(pre_trig, post_trig, tau1=2,tau2=20, Fs = 100):
     # Fs: samples per s
     x = np.arange(0,(pre_trig+post_trig))/Fs
     x0 = pre_trig/Fs
@@ -69,6 +80,11 @@ def roll_zeropad(a, shift):
     y = np.roll(a,shift)
     y[:shift]=0
     return y
+
+def slope(y, x=None):
+    x = np.arange(len(y)) if x is None else x
+    slope,*_ = scipy.stats.linregress(x, y)
+    return slope
 
 
 
@@ -190,3 +206,16 @@ def constant_fraction_discriminator(waveform: List[float], baseline: float, thre
 # plot(trace)
 # print(leading_edges)
 # axvline(leading_edges[0][1])
+
+
+    
+def float_to_ADU(waveform, bits=14):
+    # SCPIcmd = ":DATA1 VOLATILE, "
+    # strData = ""
+    # for i in waveform:
+    #     strData+=f"{i:.7f},"
+    # strData=strData[:-1]   
+    # SCPIcmd = SCPIcmd + strData
+    waveform/=np.max(np.abs(waveform))
+    waveform=np.round(waveform* 2**(bits-1))
+    return waveform    
