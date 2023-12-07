@@ -49,6 +49,33 @@ def Pulse(x, A, x0 = 0, tau1=2, tau2=20):
     kernel_normed = kernel/np.max(kernel)
     return kernel_normed*A
 
+def Pulse2(x, tau_r, tau_f1, tau_f2, A1, A2, t0, A0):
+    # Test: plot(np.linspace(-50,50,200), Pulse3(np.linspace(-50,50,200), 2,4,10,20,3,2,1,10.5,5))
+    times=x-t0
+    mask =times>0
+    pulse = (A1     *     (np.exp(-times[mask] / tau_f1))
+            +A2     *     (np.exp(-times[mask] / tau_f2))
+            -(A1+A2) * (np.exp(-times[mask] / tau_r))
+            )
+    pulse = np.concatenate((np.zeros(sum(~mask)), pulse))
+    pulse/=max(pulse)
+    pulse*=A0
+    return pulse
+
+def Pulse3(x, tau_r, tau_f1, tau_f2, tau_f3, A1, A2, A3, t0, A0):
+    # Test: plot(np.linspace(-50,50,200), Pulse3(np.linspace(-50,50,200), 2,4,10,20,3,2,1,10.5,5))
+    times=x-t0
+    mask =times>0
+    pulse = (A1     *     (np.exp(-times[mask] / tau_f1))
+            +A2     *     (np.exp(-times[mask] / tau_f2))
+            +A3     *     (np.exp(-times[mask] / tau_f3))
+            -(A1+A2+A3) * (np.exp(-times[mask] / tau_r))
+            )
+    pulse = np.concatenate((np.zeros(sum(~mask)), pulse))
+    pulse/=max(pulse)
+    pulse*=A0
+    return pulse
+
 def Chi2(x, dof, A):
     return scipy.stats.chi2.pdf(x,dof)*A 
 
@@ -216,6 +243,31 @@ def float_to_ADU(waveform, bits=14):
     #     strData+=f"{i:.7f},"
     # strData=strData[:-1]   
     # SCPIcmd = SCPIcmd + strData
-    waveform/=np.max(np.abs(waveform))
-    waveform=np.round(waveform* 2**(bits-1))
-    return waveform    
+    waveform_new=waveform/np.max(np.abs(waveform))
+    waveform_new=np.round(waveform_new* 2**(bits-1))
+    return waveform_new    
+
+
+
+
+
+# Generate white noise
+def fftnoise(f):
+    f = np.array(f, dtype='complex')
+    Np = (len(f) - 1) // 2
+    phases = np.random.rand(Np) * 2 * np.pi
+    phases = np.cos(phases) + 1j * np.sin(phases)
+    f[1:Np+1] *= phases
+    f[-1:-1-Np:-1] = np.conj(f[1:Np+1])
+    return np.fft.ifft(f).real
+
+def band_limited_noise(min_freq, max_freq, samples=1024, samplerate=1):
+    """
+    Generate band limited noise
+    The returned noise density is 1/rtHz
+    """
+    freqs = np.abs(np.fft.fftfreq(samples, 1/samplerate))
+    f = np.zeros(samples)
+    idx = np.where(np.logical_and(freqs>=min_freq, freqs<=max_freq))[0]
+    f[idx] = 1
+    return fftnoise(f)*np.sqrt(samples*samplerate/2)

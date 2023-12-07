@@ -257,7 +257,7 @@ def get_events(scope, Nevents = 100, trigger_channel = 1, read_channel = [1,2], 
 
     
     
-def upload_waveform(funcgen, waveform_int, waveform_duration = 0.4, ch = 1, interpolation=True, trigger_mode = "INTernal2", trigger_freq = 500, output_voltage = 0.1, output_offset=0, output_impedance=50):
+def upload_waveform(funcgen, waveform_int, waveform_duration = 0.4, ch = 1, interpolation=True, trigger_mode = "INTernal2", trigger_freq = 500, output_voltage = 0.1, output_offset=0, output_impedance=50, RESET=True, INIT = True):
     """
     Upload waveform to Keysight 81160A function generator
     
@@ -290,46 +290,53 @@ def upload_waveform(funcgen, waveform_int, waveform_duration = 0.4, ch = 1, inte
         output impedance in Ohm. You can set the load to any value from 0.3 to 1M. Default is 50 Ohm
     
     """
-    funcgen.write("*RST"); # Reset the function generator
-    # funcgen.write(":DISP OFF");         # Output the selected arb waveform  
-    funcgen.write_binary_values(f":DATA{ch}:DAC VOLATILE,", waveform_int, datatype="h", is_big_endian=True)    
-    funcgen.write(f":FUNCtion{ch}:USER VOLATILE");         # Select the active arb waveform
-    funcgen.write(f":FUNCtion{ch}:SHAPe USER");         # Output the selected arb waveform
-    
-    
-    # Interpolation ON
-    if interpolation:
-        funcgen.write(":DIG:TRAN:INT ON")    
-    else:
-        funcgen.write(":DIG:TRAN:INT OFF")    
-        
-        
 
-    # Set Frequency
+    # Calculate Frequency
     # if len(waveform_int)<=16384:
     #     waveform_duration = dt_ns*16384
     # else:
     #     waveform_duration = dt_ns*262144
-    waveform_frequency = 1/(waveform_duration)*1e9        
+    waveform_frequency = 1/(waveform_duration)*1e9       
+    
+    
+    if RESET:
+        funcgen.write("*RST"); # Reset the function generator
         
-    
-    funcgen.write(f":FREQuency{ch} {waveform_frequency}");  # Set the frequency to 125kHz so that 1 sample = 1ns. 122070 = 2Ghz/16384. 2.5 GHz for 81160
-    
-    
-    
-    # Set Trigger mode
-    funcgen.write(f":ARM:SOUR{ch} {trigger_mode}");  
-    funcgen.write(f":ARM:FREQ{ch} {trigger_freq}Hz")    
-    
-    
-    # Set output parameter
-    funcgen.write(f":OUTPut{ch}:LOAD output_impedance");               # Output termination is 50 Ohms
-    funcgen.write(f":VOLT{ch} {output_voltage}VPP");  # Set the frequency to 125kHz so that 1 sample = 1ns. 122070 = 2Ghz/16384. 2.5 GHz for 81160
-    funcgen.write(f":VOLT{ch}:OFFS {output_offset}VPP");  # Set the frequency to 125kHz so that 1 sample = 1ns. 122070 = 2Ghz/16384. 2.5 GHz for 81160
+        
+    # funcgen.write(":DISP OFF");         # Output the selected arb waveform  
+    funcgen.write_binary_values(f":DATA{ch}:DAC VOLATILE,", waveform_int, datatype="h", is_big_endian=True)    
 
-    
-    funcgen.write(":DISP ON");         
-    funcgen.write(":OUTPut1 ON");      # Output the selected arb waveform  
+    if INIT:
+        
+        funcgen.write(f":FUNCtion{ch}:USER VOLATILE");         # Select the active arb waveform
+        funcgen.write(f":FUNCtion{ch}:SHAPe USER");         # Output the selected arb waveform        
+        
+        # Interpolation ON
+        if interpolation:
+            funcgen.write(":DIG:TRAN:INT ON")    
+        else:
+            funcgen.write(":DIG:TRAN:INT OFF")   
+
+
+        funcgen.write(f":FREQuency{ch} {waveform_frequency}");  # Set the frequency to 125kHz so that 1 sample = 1ns. 122070 = 2Ghz/16384. 2.5 GHz for 81160
+
+
+
+        # Set Trigger mode
+        funcgen.write(f":ARM:SOUR{ch} {trigger_mode}");  
+        funcgen.write(f":ARM:FREQ{ch} {trigger_freq}Hz")    
+
+
+        # Set output parameter
+        funcgen.write(f":OUTPut{ch}:LOAD output_impedance");               # Output termination is 50 Ohms
+        funcgen.write(f":VOLT{ch}:OFFS {output_offset}VPP");  # Set the frequency to 125kHz so that 1 sample = 1ns. 122070 = 2Ghz/16384. 2.5 GHz for 81160
+
+
+        funcgen.write(":DISP ON");         
+        funcgen.write(f":OUTPut{ch} ON");      # Output the selected arb waveform  
+        
+    funcgen.write(f":VOLT{ch} {output_voltage}VPP");  # Set the frequency to 125kHz so that 1 sample = 1ns. 122070 = 2Ghz/16384. 2.5 GHz for 81160
+        
     
 def trigger(funcgen):
     funcgen.write(":TRIG")
